@@ -1,32 +1,33 @@
 import flet as ft
 from api import get_area_data, get_weather
-
+from db import init_db, insert_weather, get_weather_from_db
 
 def main(page: ft.Page):
-    page.title = "天気予報アプリ"
-    page.window_width = 900
-    page.window_height = 600
+    init_db()
+    page.title = "天気予報DBアプリ"
 
-    weather_view = ft.Column(scroll=ft.ScrollMode.AUTO)
+    weather_view = ft.Column()
 
-    # ===== 天気表示 =====
     def show_weather(area_code, area_name):
-        weather_view.controls.clear()
-
         data = get_weather(area_code)
         ts = data[0]["timeSeries"][0]
         area_weather = ts["areas"][0]
         times = ts["timeDefines"]
         weathers = area_weather["weathers"]
 
-        weather_view.controls.append(ft.Text(area_name, size=22, weight="bold"))
-
+        # DBに保存
         for t, w in zip(times[:3], weathers[:3]):
-            weather_view.controls.append(ft.Text(f"{t[:10]}：{w}"))
+            insert_weather(area_code, area_name, t[:10], w)
 
+        # DBから取得
+        records = get_weather_from_db(area_code)
+
+        weather_view.controls.clear()
+        weather_view.controls.append(ft.Text(area_name, size=20, weight="bold"))
+        for d, w in records:
+            weather_view.controls.append(ft.Text(f"{d}：{w}"))
         page.update()
 
-    # ===== 地域リスト =====
     area_json = get_area_data()
     centers = area_json["centers"]
     offices = area_json["offices"]
@@ -49,34 +50,28 @@ def main(page: ft.Page):
     def on_center_change(e):
         create_office_list(center_codes[e.control.selected_index])
 
-    nav_rail = ft.NavigationRail(
+    nav = ft.NavigationRail(
         selected_index=0,
         label_type=ft.NavigationRailLabelType.ALL,
         on_change=on_center_change,
     )
 
-    for code in center_codes:
-        nav_rail.destinations.append(
+    for c in center_codes:
+        nav.destinations.append(
             ft.NavigationRailDestination(
                 icon=ft.Icons.LOCATION_ON,
-                label=centers[code]["name"],
+                label=centers[c]["name"]
             )
         )
 
     create_office_list(center_codes[0])
 
     page.add(
-        ft.Row(
-            [
-                nav_rail,
-                ft.VerticalDivider(width=1),
-                ft.Container(width=250, content=office_list),
-                ft.VerticalDivider(width=1),
-                ft.Container(expand=True, padding=20, content=weather_view),
-            ],
-            expand=True,
-        )
+        ft.Row([
+            nav,
+            ft.Container(width=250, content=office_list),
+            ft.Container(expand=True, padding=20, content=weather_view)
+        ], expand=True)
     )
-
 
 ft.app(target=main)
